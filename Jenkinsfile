@@ -2,53 +2,54 @@ pipeline {
     agent any
 
     environment {
-        APP_NAME = "onlinebookstore"
-        REGISTRY = "your-dockerhub-username"
-        BRANCH_NAME = "${env.GIT_BRANCH}".replaceAll('/', '-')
+        APP_NAME = "online-book-store1"
+        IMAGE_NAME = "online-book-store1:v1"
+        CONTAINER_NAME = "bookstore1"
+        HOST_PORT = "8082"
+        CONTAINER_PORT = "8080"
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/your-org/onlinebookstore.git'
+                git branch: 'master',
+                    url: 'https://github.com/anithavalluri02/onlinebookstore1.git/'
             }
         }
 
-        stage('Build') {
+        stage('Check Workspace') {
             steps {
-                sh 'mvn clean package -DskipTests'
-            }
-        }
-
-        stage('Unit Tests') {
-            steps {
-                sh 'mvn test'
-            }
-            post {
-                always {
-                    junit 'target/surefire-reports/*.xml'
-                }
+                sh 'ls -R'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    dockerImage = docker.build("${REGISTRY}/${APP_NAME}:${BRANCH_NAME}-${env.BUILD_NUMBER}")
-                }
+                sh "docker rmi -f ${IMAGE_NAME} || true"
+                sh "docker build -t ${IMAGE_NAME} -f Dockerfile ."
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Deploy Container') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
-                    sh "docker push ${REGISTRY}/${APP_NAME}:${BRANCH_NAME}-${env.BUILD_NUMBER}"
-                }
+                sh "docker rm -f ${CONTAINER_NAME} || true"
+                sh "docker run -d --name ${CONTAINER_NAME} -p ${HOST_PORT}:${CONTAINER_PORT} ${IMAGE_NAME}"
             }
         }
 
-        stage('Deploy to Dev') {
-            when {
-                branch 'main'
+        stage('Check Deployment') {
+            steps {
+                sh "docker ps | grep ${CONTAINER_NAME}"
             }
+        }
+    }
+
+    post {
+        failure {
+            echo "❌ Deployment failed. Check logs."
+        }
+        success {
+            echo "✅ Deployment successful."
+        }
+    }
+}
